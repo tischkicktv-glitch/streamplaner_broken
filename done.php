@@ -4,7 +4,13 @@ $db_file = __DIR__ . '/kicker.db';
 $log_file = __DIR__ . '/logs.txt';
 
 // Nginx übergibt das Ziel (z.B. tischkicktv oder tischkicktv_6)
-$streamingziel = $_GET['token'] ?? 'unknown';
+$streamingziel = trim((string)($_GET['token'] ?? ''));
+if ($streamingziel === '$name' || $streamingziel === '$app') {
+    $streamingziel = '';
+}
+if ($streamingziel === '') {
+    $streamingziel = trim((string)($_POST['app'] ?? 'unknown'));
+}
 
 try {
     $db = new PDO("sqlite:$db_file");
@@ -16,35 +22,34 @@ try {
     
     // WICHTIG: Wenn kein Index mitgeliefert wird, ist $currentIndex NULL
     $currentIndex = isset($parts[1]) ? (string)$parts[1] : null;
+    $requestedIndex = ($currentIndex !== null && $currentIndex !== '') ? $currentIndex : null;
 
-    if ($currentIndex !== null) {
-        // Präzise Suche: Falls ein Index (_6) mitkommt, suchen wir genau diesen in den public_targets
+    if ($requestedIndex !== null) {
         $stmt = $db->prepare("
-            SELECT b.id as bid, c.id as cid, c.name as chan_name 
-            FROM teams t 
-            JOIN bookings b ON t.id = b.team_id 
-            JOIN channels c ON b.channel_id = c.id 
-            WHERE LOWER(t.stream_path) = ? 
+            SELECT b.id as bid, c.id as cid, c.name as chan_name
+            FROM teams t
+            JOIN bookings b ON t.id = b.team_id
+            JOIN channels c ON b.channel_id = c.id
+            WHERE LOWER(t.stream_path) = ?
             AND (b.public_targets = ? OR b.public_targets LIKE ? OR b.public_targets LIKE ? OR b.public_targets LIKE ?)
-            AND b.is_live = 1 
+            AND b.is_live = 1
             ORDER BY b.start_time DESC LIMIT 1
         ");
         $stmt->execute([
-            $base_path, 
-            $currentIndex, 
-            $currentIndex . ',%', 
-            '%,' . $currentIndex, 
-            '%,' . $currentIndex . ',%'
+            $base_path,
+            $requestedIndex,
+            $requestedIndex . ',%',
+            '%,' . $requestedIndex,
+            '%,' . $requestedIndex . ',%'
         ]);
     } else {
-        // FALLBACK: Wenn nur 'tischkicktv' kommt, nehmen wir die aktuellste Live-Buchung dieses Vereins
         $stmt = $db->prepare("
-            SELECT b.id as bid, c.id as cid, c.name as chan_name 
-            FROM teams t 
-            JOIN bookings b ON t.id = b.team_id 
-            JOIN channels c ON b.channel_id = c.id 
-            WHERE LOWER(t.stream_path) = ? 
-            AND b.is_live = 1 
+            SELECT b.id as bid, c.id as cid, c.name as chan_name
+            FROM teams t
+            JOIN bookings b ON t.id = b.team_id
+            JOIN channels c ON b.channel_id = c.id
+            WHERE LOWER(t.stream_path) = ?
+            AND b.is_live = 1
             ORDER BY b.start_time DESC LIMIT 1
         ");
         $stmt->execute([$base_path]);
