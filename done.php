@@ -4,7 +4,13 @@ $db_file = __DIR__ . '/kicker.db';
 $log_file = __DIR__ . '/logs.txt';
 
 // Nginx übergibt das Ziel (z.B. tischkicktv oder tischkicktv_6)
-$streamingziel = $_GET['token'] ?? 'unknown';
+$streamingziel = trim((string)($_GET['token'] ?? ''));
+if ($streamingziel === '$name' || $streamingziel === '$app') {
+    $streamingziel = '';
+}
+if ($streamingziel === '') {
+    $streamingziel = trim((string)($_POST['app'] ?? 'unknown'));
+}
 
 try {
     $db = new PDO("sqlite:$db_file");
