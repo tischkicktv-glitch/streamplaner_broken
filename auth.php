@@ -11,12 +11,19 @@ function writeLog($msg) {
 }
 
 // 1. Identifikation (Der entscheidende Teil!)
-// Versuche erst den Token aus der URL (?token=$name)
-$token_target = $_GET['token'] ?? '';
+// Primär aus URL-Token lesen, dann robust auf RTMP-Notify-Felder fallen.
+$token_target = trim((string)($_GET['token'] ?? ''));
 
-// FALLBACK: Wenn kein Token da ist (OBS Feld leer), nimm den App-Namen aus dem POST
+// Manche Nginx-Setups liefern Platzhalter wie "$name" unverändert.
+if ($token_target === '$name' || $token_target === '$app') {
+    $token_target = '';
+}
+
 if (empty($token_target)) {
-    $token_target = $_POST['app'] ?? '';
+    $token_target = trim((string)($_POST['app'] ?? ''));
+}
+if (empty($token_target)) {
+    $token_target = trim((string)($_POST['name'] ?? ''));
 }
 
 if (empty($token_target)) {
