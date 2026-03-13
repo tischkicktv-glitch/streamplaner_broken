@@ -41,6 +41,7 @@ try {
     $parts = explode('_', strtolower($token_target));
     $base_path = $parts[0];
     $currentIndex = isset($parts[1]) ? $parts[1] : null;
+    $requestedIndex = ($currentIndex === null) ? '0' : (string)$currentIndex;
 
     // Team anhand des stream_path finden
     $stmt = $db->prepare("SELECT id, name FROM teams WHERE LOWER(stream_path) = ? LIMIT 1");
@@ -61,32 +62,31 @@ try {
         SELECT b.*, c.name as chan_name, c.obs_key, c.twitch_id, c.client_id, c.secret as client_secret, c.refresh_token
         FROM bookings b
         JOIN channels c ON b.channel_id = c.id
-        WHERE b.team_id = ? 
-        AND b.start_time <= ? 
+        WHERE b.team_id = ?
+        AND b.start_time <= ?
         AND b.end_time >= ?
+        AND (b.public_targets = ? OR b.public_targets LIKE ? OR b.public_targets LIKE ? OR b.public_targets LIKE ?)
         ORDER BY b.start_time ASC LIMIT 1
     ");
-    $stmt->execute([$team['id'], $now, $now]);
+    $stmt->execute([
+        $team['id'],
+        $now,
+        $now,
+        $requestedIndex,
+        $requestedIndex . ',%',
+        '%,' . $requestedIndex,
+        '%,' . $requestedIndex . ',%'
+    ]);
     $booking = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if (!$booking) {
-        writeLog("FAIL | Keine Buchung für " . $team['name'] . " aktuell aktiv ($token_target)");
+        writeLog("FAIL | Keine passende Buchung für " . $team['name'] . " auf Zielindex $requestedIndex aktiv ($token_target)");
         header("HTTP/1.1 403 Forbidden");
         exit;
     }
 
-    // Prüfen, ob wir auf Twitch (Public) oder Intern streamen
-    $public_targets = explode(',', $booking['public_targets'] ?? '');
-    
-    // Wenn kein Index da ist, nehmen wir standardmäßig an, es ist das Hauptziel
-    $is_public = false;
-    if ($currentIndex === null) {
-        // Logik von gestern: Ohne Index schauen wir, ob überhaupt ein Ziel public ist
-        if ($booking['internal_only'] == 0) $is_public = true;
-    } else {
-        // Mit Index prüfen wir gegen die Liste (z.B. "1,6")
-        if (in_array((string)$currentIndex, $public_targets)) $is_public = true;
-    }
+    // Für den angefragten Zielindex ist die Buchung gefunden; Twitch nur bei nicht-intern.
+    $is_public = ($booking['internal_only'] == 0);
 
     if ($is_public && !empty($booking['obs_key'])) {
         // LIVE ZU TWITCH
